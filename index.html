@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Synth Frontend Prototype</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; padding: 50px; text-align: center; }
-        .controls { background: #2a2a2a; padding: 20px; border-radius: 10px; display: inline-block; }
-        .control-group { margin: 15px 0; }
-        label { display: block; margin-bottom: 5px; }
-        button { background: #00ff88; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        button:active { background: #00cc6e; }
+        body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; padding: 30px; text-align: center; }
+        .synth-container { background: #1e1e1e; padding: 30px; border-radius: 12px; display: inline-block; max-width: 500px; width: 100%; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .control-group { margin: 15px 0; text-align: left; }
+        .section-title { color: #00ff88; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 20px; text-align: left; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;}
+        label { display: block; margin-bottom: 5px; font-size: 13px; color: #ccc; }
+        select, input[type="range"] { width: 100%; padding: 8px; border-radius: 6px; border: none; background: #333; color: #fff; }
+        .trigger-btn { background: #00ff88; color: #1a1a1a; border: none; padding: 12px 20px; border-radius: 6px; font-size: 16px; cursor: pointer; transition: background 0.3s ease; }
+        .trigger-btn:hover { background: #00ee7c; }
+        .trigger-btn:active { background: #00cc6e; }
     </style>
 </head>
 
@@ -19,12 +22,13 @@
 
     <h1> WEB SYNTHESIZER PROTOTYPE </h1>
 
-    <div class="controls">
-        <button id="playBtn">Play One Shot</button>
+    <div class="synth-container">
+        <button id="playBtn" class="trigger-btn">Play One Shot</button>
 
+        <div class="section-title">Oscillator</div>
         <div class="control-group">
-            <label for="oscType">Oscillator Type:</label>
-            <select id="oscType">
+            <label for="waveType">Waveform:</label>
+            <select id="waveType">
                 <option value="sine">Sine</option>
                 <option value="square">Square</option>
                 <option value="sawtooth">Sawtooth</option>
@@ -33,14 +37,53 @@
         </div>
 
         <div class="control-group">
-            <label for="freq">Frequency:</label>
-            <input type="range" id="freq" min="60" max="1000" value="220">
+            <label for="freq">Base Pitch (Frequency: <span id="freqVal">220</span> Hz)</label>
+            <input type="range" id="freq" min="40" max="880" value="220">
         </div>
     </div>
 
+    # Filter and Envelope controls
+    <div class="section-title">Filter</div>
+        <div class="control-group">
+            <label for="cutoff">Cutoff Frequency (<span id="cutoffVal">2000</span> Hz)</label>
+            <input type="range" id="cutoff" min="100" max="10000" value="2000">
+        </div>
+
+        <div class="section-title">Volume Envelope (ADSR)</div>
+        <div class="control-group">
+            <label for="attack">Attack Time (<span id="attackVal">0.1</span>s)</label>
+            <input type="range" id="attack" min="0" max="2" step="0.05" value="0.1">
+        </div>
+        <div class="control-group">
+            <label for="decay">Decay Time (<span id="decayVal">0.3</span>s)</label>
+            <input type="range" id="decay" min="0" max="2" step="0.05" value="0.3">
+        </div>
+        <div class="control-group">
+            <label for="sustain">Sustain Level (<span id="sustainVal">0.6</span>)</label>
+            <input type="range" id="sustain" min="0" max="1" step="0.05" value="0.6">
+        </div>
+        <div class="control-group">
+            <label for="release">Release Time (<span id="releaseVal">0.5</span>s)</label>
+            <input type="range" id="release" min="0.05" max="3" step="0.05" value="0.5">
+        </div>
+    </div>
     <script>
         
         let audioCtx = null;
+
+        const freqSlider = (id, valId, suffix = "") => {
+            const input = document.getElementById(id);
+            const label = document.getElementById(valId);
+            input.addEventListener('input', () => {
+                label.textContent = input.value + suffix;
+            });
+        };
+        freqSlider('freq', 'freqVal', ' Hz');
+        freqSlider('cutoff', 'cutoffVal', ' Hz');
+        freqSlider('attack', 'attackVal', 's');
+        freqSlider('decay', 'decayVal', 's');
+        freqSlider('sustain', 'sustainVal');
+        freqSlider('release', 'releaseVal', 's');
 
         document.getElementById('playBtn').addEventListener('click', async () => {
             if (!audioCtx) {
@@ -51,34 +94,57 @@
             if (audioCtx.state == 'suspended'){
                 await audioCtx.resume();
             }
+
+            // Easier to read variable then mentioning audioCtx.currentTime multiple times
+            const now = audioCtx.currentTime;
             // Create oscillator and gain nodes
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
 
             // Get selected oscillator type and frequency from UI
-            const selectedWave = document.getElementById('oscType').value;
-            const selectedFreq = document.getElementById('freq').value;
+            const waveType = document.getElementById('waveType').value;
+            const frequency = parseFloat(document.getElementById('freq').value);
+            const cutoff = parseFloat(document.getElementById('cutoff').value);
+            const attack = parseFloat(document.getElementById('attack').value);
+            const decay = parseFloat(document.getElementById('decay').value);
+            const sustain = parseFloat(document.getElementById('sustain').value);
+            const release = parseFloat(document.getElementById('release').value);
 
-            osc.type = selectedWave;
-            osc.frequency.setValueAtTime(selectedFreq, audioCtx.currentTime);
+            osc.type = waveType;
+            osc.frequency.setValueAtTime(frequency, now);
 
+            // Set filter parameters
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(cutoff, now);
 
             // Set initial gain to 0 to prevent clicks (Volume envelope)
-            const now = audioCtx.currentTime
+
             gainNode.gain.setValueAtTime(0, now);
 
-            // Fades audio in over 50ms to prevent clicks
-            gainNode.gain.linearRampToValueAtTime(1, now + 0.05);
+            // User adjusted attack time
+            gainNode.gain.linearRampToValueAtTime(1, now + attack);
 
-            // Keep the tone audible for one second, then fade out near the end
-            gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
+            // User adjusted decay time and sustain level
+            const sustainStart = Math.max(sustain, 0.001); // Ensure sustain is not zero to avoid issues with linearRampToValueAtTime
+            gainNode.gain.exponentialRampToValueAtTime(sustainStart, now + attack + decay);
 
-            osc.connect(gainNode);
+            const noteDuration = 0.5; // Total duration of the note in seconds
+            const releaseStartTime = now + attack + decay + noteDuration; 
+            gainNode.gain.setValueAtTime(sustain, releaseStartTime);
+
+            gainNode.gain.linearRampToValueAtTime(0.001, releaseStartTime + release); // Ramp down to near zero to avoid clicks
+
+
+            //Connecting nodes: Oscillator -> Filter -> Gain -> Destination
+
+            osc.connect(filter);
+            filter.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-
             osc.start(now);
-            // Stops the oscillator after 1 second to make the sound last exactly one second
-            osc.stop(now + 1);
+            
+            const totalDuration = attack + decay + noteDuration + release;
+            osc.stop(now + totalDuration);
             
         });
     </script>
