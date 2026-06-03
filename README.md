@@ -24,7 +24,7 @@ A high-performance, browser based software synthesizer featuring real time Digit
 ### Backend Setup
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/only1r/ai-synth-copilot.git](https://github.com/only1r/ai-synth-copilot.git)
+   git clone [https://github.com/only1r/OneShot.git](https://github.com/only1r/OneShot.git)
    cd ai-synth-copilot
 ##
 Website link: https://only1r.github.io/OneShot/
