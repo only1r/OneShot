@@ -50,6 +50,11 @@
             <label for="unison">Unison Detune (<span id="unisonVal">0</span> cents)</label>
             <input type="range" id="unison" min="0" max="50" value="0" step="1">
         </div>
+
+        <div class="control-group">
+            <label for="volume">Master Volume (<span id="volumeVal">80</span>%)</label>
+            <input type="range" id="volume" min="0" max="100" value="80" step="1">
+        </div>
     </div>
 
     // AI Copilot Section
@@ -119,6 +124,15 @@
         freqSlider('release', 'releaseVal', 's');
         freqSlider('voices', 'voicesVal');
         freqSlider('unison', 'unisonVal', ' cents');
+        freqSlider('volume', 'volumeVal');
+
+        // Volume slider - update master gain
+        document.getElementById('volume').addEventListener('input', () => {
+            if (masterGainNode) {
+                const volume = parseFloat(document.getElementById('volume').value) / 100;
+                masterGainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+            }
+        });
 
         async function initAudioContext() {
             if (!audioCtx) {
@@ -126,6 +140,9 @@
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 2048;
                 masterGainNode = audioCtx.createGain();
+                // Set initial volume
+                const volumePercent = parseFloat(document.getElementById('volume').value) / 100;
+                masterGainNode.gain.setValueAtTime(volumePercent, audioCtx.currentTime);
                 masterGainNode.connect(analyser);
                 analyser.connect(audioCtx.destination);
                 initVisualizer();
