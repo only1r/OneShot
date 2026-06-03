@@ -1,17 +1,44 @@
 import os
 import json
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-load_dotenv()
+dotenv_path = Path(__file__).resolve().parent / ".env"
+if not dotenv_path.exists():
+    raise RuntimeError(
+        f"{dotenv_path} not found. Create a .env file with GEMINI_API_KEY in the project folder."
+    )
+
+if not load_dotenv(dotenv_path=dotenv_path):
+    raise RuntimeError(
+        f"Could not load {dotenv_path}. Ensure it contains GEMINI_API_KEY."
+    )
+
+# Validate Gemini API key at startup
+gemini_api_key = os.environ.get("GEMINI_API_KEY")
+if not gemini_api_key:
+    raise RuntimeError(
+        "GEMINI_API_KEY is not set. Add it to .env or export it in your environment before starting the server."
+    )
 
 # Initialize FastAPI
 app = FastAPI(title="AI Synth Copilot API")
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Configure Gemini
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+genai.configure(api_key=gemini_api_key)
 
 # Define the request model
 class SoundRequest(BaseModel):
@@ -46,7 +73,7 @@ async def generate_patch(request: SoundRequest):
 
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="models/gemini-2.5-flash",
             system_instruction=system_instruction,
             generation_config={"response_mime_type": "application/json"}
         )
