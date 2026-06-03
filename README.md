@@ -22,9 +22,23 @@ A high-performance, browser based software synthesizer featuring real time Digit
 - A free [Google AI Studio API Key](https://aistudio.google.com/)
 
 ### Backend Setup
+
 1. Clone the repository:
+
    ```bash
    git clone [https://github.com/only1r/OneShot.git](https://github.com/only1r/OneShot.git)
    cd ai-synth-copilot
+
+2. Create a .env file and add created key:
+GEMINI_API_KEY=<your_api_key_here>
+
+3. Install required Python Dependencies:
+    ```bash
+    pip install fastapi uvicorn pydantic google-generativeai python-dotenv
+
+4. Start your local server
+    ```bash
+    python -m uvicorn main:app --reload
+
 ##
 Website link: https://only1r.github.io/OneShot/
