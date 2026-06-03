@@ -42,14 +42,14 @@
         </div>
     </div>
 
-    # AI Copilot Section
+    <!-- AI Copilot Section -->
     <div class="section-title" style="color: #a200ff; border-bottom-color: #a200ff;">AI Copilot</div>
         <div class="control-group">
             <input type="text" id="aiPrompt" placeholder="e.g., A dark, plucky 80s bass with a long echo..." style="padding: 12px; width: 100%; border-radius: 6px; border: none; background: #333; color: white; font-size: 14px; box-sizing: border-box;">
             <button id="generateBtn" class="trigger-btn" style="background: #a200ff; color: white; margin-top: 10px;">Generate & Play</button>
         </div>
 
-    # Filter and Envelope controls
+    <!-- Filter and Envelope controls -->
     <div class="section-title">Filter</div>
         <div class="control-group">
             <label for="cutoff">Cutoff Frequency (<span id="cutoffVal">2000</span> Hz)</label>
@@ -74,9 +74,17 @@
             <input type="range" id="release" min="0.05" max="3" step="0.05" value="0.5">
         </div>
     </div>
+
+    <!-- Visualizer Section -->
+    <div class="section-title" style="color: #00ffcc; border-bottom-color: #00ffcc;">Wavetable Oscilloscope</div>
+        <div class="control-group" style="background: #0d0d0d; padding: 10px; border-radius: 8px; border: 1px solid #222;">
+            <canvas id="visualizer" width="440" height="180" style="background: #050505; border-radius: 4px; width: 100%; display: block;"></canvas>
+        </div>
+
     <script>
         
         let audioCtx = null;
+        let analyser = null;
 
         const freqSlider = (id, valId, suffix = "") => {
             const input = document.getElementById(id);
@@ -95,6 +103,10 @@
         document.getElementById('playBtn').addEventListener('click', async () => {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 2048;
+                analyser.connect(audioCtx.destination);
+                initVisualizer();
             }
 
             // Resume audio context if it's suspended 
@@ -143,11 +155,12 @@
             gainNode.gain.linearRampToValueAtTime(0.001, releaseStartTime + release); // Ramp down to near zero to avoid clicks
 
 
-            //Connecting nodes: Oscillator -> Filter -> Gain -> Destination
+            //Connecting nodes: Oscillator -> Filter -> Gain -> Analyser -> Destination
 
             osc.connect(filter);
             filter.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            gainNode.connect(analyser);
+            analyser.connect(audioCtx.destination);
             osc.start(now);
             
             const totalDuration = attack + decay + noteDuration + release;
@@ -208,6 +221,74 @@
                 aiBtn.disabled = false;
             }
         });
+
+        //Waveform Visualizer Logic
+        function initVisualizer() {
+            if (!analyser) return;
+            
+            const canvas = document.getElementById('visualizer');
+            const canvasCtx = canvas.getContext('2d');
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                requestAnimationFrame(draw);
+                analyser.getByteTimeDomainData(dataArray);
+
+                // 1. Draw a dark slate background
+                canvasCtx.fillStyle = '#08090c';
+                canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // 2. Draw Serum-style background grid lines
+                canvasCtx.strokeStyle = '#141923';
+                canvasCtx.lineWidth = 1;
+                
+                // Vertical grid lines
+                for (let x = 0; x < canvas.width; x += 40) {
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(x, 0);
+                    canvasCtx.lineTo(x, canvas.height);
+                    canvasCtx.stroke();
+                }
+                // Horizontal grid lines
+                for (let y = 0; y < canvas.height; y += 30) {
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(0, y);
+                    canvasCtx.lineTo(canvas.width, y);
+                    canvasCtx.stroke();
+                }
+
+                // 3. Configure a Glowing Neon Waveform Line (Serum style!)
+                canvasCtx.lineWidth = 3;
+                canvasCtx.strokeStyle = '#00ffcc'; // Neon Cyan/Teal
+                canvasCtx.shadowBlur = 8;          // Glow strength
+                canvasCtx.shadowColor = '#00ffcc'; // Glow color
+                canvasCtx.beginPath();
+
+                const sliceWidth = canvas.width * 1.0 / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+
+                    if (i === 0) {
+                        canvasCtx.moveTo(x, y);
+                    } else {
+                        canvasCtx.lineTo(x, y);
+                    }
+                    x += sliceWidth;
+                }
+
+                canvasCtx.lineTo(canvas.width, canvas.height / 2);
+                canvasCtx.stroke();
+
+                // Reset shadow properties so it doesn't slow down the next frames
+                canvasCtx.shadowBlur = 0;
+            }
+
+            draw();
+        }
 
     </script>
 </body>
