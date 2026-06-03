@@ -40,6 +40,16 @@
             <label for="freq">Base Pitch (Frequency: <span id="freqVal">220</span> Hz)</label>
             <input type="range" id="freq" min="40" max="880" value="220">
         </div>
+
+        <div class="section-title">Unison</div>
+        <div class="control-group">
+            <label for="voices">Unison Voices (<span id="voicesVal">1</span>)</label>
+            <input type="range" id="voices" min="1" max="8" value="1" step="1">
+        </div>
+        <div class="control-group">
+            <label for="unison">Unison Detune (<span id="unisonVal">0</span> cents)</label>
+            <input type="range" id="unison" min="0" max="50" value="0" step="1">
+        </div>
     </div>
 
     <!-- AI Copilot Section -->
@@ -85,6 +95,14 @@
         
         let audioCtx = null;
         let analyser = null;
+        let activeNotes = {}; // Track currently playing notes
+        let masterGainNode = null;
+
+        // Note to frequency mapping (C4 = 262 Hz)
+        const noteFrequencies = {
+            'C': 262.00, 'C#': 277.18, 'D': 293.66, 'D#': 311.13, 'E': 329.63, 'F': 349.23,
+            'F#': 369.99, 'G': 392.00, 'G#': 415.30, 'A': 440.00, 'A#': 466.16, 'B': 493.88
+        };
 
         const freqSlider = (id, valId, suffix = "") => {
             const input = document.getElementById(id);
@@ -99,72 +117,123 @@
         freqSlider('decay', 'decayVal', 's');
         freqSlider('sustain', 'sustainVal');
         freqSlider('release', 'releaseVal', 's');
+        freqSlider('voices', 'voicesVal');
+        freqSlider('unison', 'unisonVal', ' cents');
 
-        document.getElementById('playBtn').addEventListener('click', async () => {
+        async function initAudioContext() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 2048;
+                masterGainNode = audioCtx.createGain();
+                masterGainNode.connect(analyser);
                 analyser.connect(audioCtx.destination);
                 initVisualizer();
             }
-
-            // Resume audio context if it's suspended 
-            if (audioCtx.state == 'suspended'){
+            if (audioCtx.state === 'suspended') {
                 await audioCtx.resume();
             }
+        }
 
-            // Easier to read variable then mentioning audioCtx.currentTime multiple times
+        function playNote(note, duration = null) {
+            initAudioContext().then(() => {
+                // Stop any existing note with this key first (allows re-triggering)
+                if (activeNotes[note]) {
+                    stopNote(note);
+                }
+                
+                const now = audioCtx.currentTime;
+                const sliderFreq = parseFloat(document.getElementById('freq').value);
+                const baseNoteFreq = noteFrequencies[note];
+                // Calculate transposition based on the slider (middle C = 262 Hz reference)
+                const transpositionRatio = sliderFreq / 262;
+                const baseFreq = baseNoteFreq * transpositionRatio;
+                const numVoices = parseInt(document.getElementById('voices').value);
+                const unisonSpread = parseFloat(document.getElementById('unison').value);
+                const waveType = document.getElementById('waveType').value;
+                const cutoff = parseFloat(document.getElementById('cutoff').value);
+                const attack = parseFloat(document.getElementById('attack').value);
+                const decay = parseFloat(document.getElementById('decay').value);
+                const sustain = parseFloat(document.getElementById('sustain').value);
+                const release = parseFloat(document.getElementById('release').value);
+
+                const voices = [];
+                const sustainLevel = Math.max(sustain / numVoices, 0.001);
+
+                // Create multiple voices with unison detune
+                for (let v = 0; v < numVoices; v++) {
+                    const detune = (v - (numVoices - 1) / 2) * (unisonSpread / (numVoices - 1 || 1));
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    const filter = audioCtx.createBiquadFilter();
+
+                    osc.type = waveType;
+                    osc.frequency.setValueAtTime(baseFreq * Math.pow(2, detune / 1200), now);
+                    
+                    filter.type = 'lowpass';
+                    filter.frequency.setValueAtTime(cutoff, now);
+
+                    // ADSR envelope per voice
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(1 / numVoices, now + attack);
+                    gain.gain.exponentialRampToValueAtTime(sustainLevel, now + attack + decay);
+
+                    osc.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(masterGainNode);
+                    osc.start(now);
+
+                    voices.push({ osc, gain, startTime: now, sustainLevel });
+                }
+
+                activeNotes[note] = { voices, duration, startTime: now };
+                
+                // If duration specified (for one-shot mode), stop after duration
+                if (duration) {
+                    const totalDuration = attack + decay + (duration || 0.5) + release;
+                    const releaseStart = now + attack + decay + (duration || 0.5);
+                    
+                    voices.forEach(v => {
+                        v.gain.gain.setValueAtTime(sustainLevel, releaseStart);
+                        v.gain.gain.linearRampToValueAtTime(0.001, releaseStart + release);
+                        v.osc.stop(now + totalDuration);
+                    });
+                    
+                    setTimeout(() => delete activeNotes[note], totalDuration * 1000);
+                }
+            });
+        }
+
+        function stopNote(note) {
+            if (!activeNotes[note]) return;
+            
             const now = audioCtx.currentTime;
-            // Create oscillator and gain nodes
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            const filter = audioCtx.createBiquadFilter();
-
-            // Get selected oscillator type and frequency from UI
-            const waveType = document.getElementById('waveType').value;
-            const frequency = parseFloat(document.getElementById('freq').value);
-            const cutoff = parseFloat(document.getElementById('cutoff').value);
-            const attack = parseFloat(document.getElementById('attack').value);
-            const decay = parseFloat(document.getElementById('decay').value);
-            const sustain = parseFloat(document.getElementById('sustain').value);
+            const { voices } = activeNotes[note];
             const release = parseFloat(document.getElementById('release').value);
 
-            osc.type = waveType;
-            osc.frequency.setValueAtTime(frequency, now);
+            voices.forEach(v => {
+                try {
+                    // Cancel any scheduled changes and ramp down from current level
+                    v.gain.gain.cancelScheduledValues(now);
+                    v.gain.gain.setValueAtTime(v.gain.gain.value, now);
+                    v.gain.gain.linearRampToValueAtTime(0.001, now + release);
+                    v.osc.stop(now + release + 0.01);
+                } catch (e) {
+                    // In case the oscillator is already stopped
+                }
+            });
 
-            // Set filter parameters
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(cutoff, now);
+            // Remove from active notes after release completes
+            setTimeout(() => {
+                delete activeNotes[note];
+            }, release * 1000 + 50);
+        }
 
-            // Set initial gain to 0 to prevent clicks (Volume envelope)
+        document.getElementById('playBtn').addEventListener('click', async () => {
+            await initAudioContext();
 
-            gainNode.gain.setValueAtTime(0, now);
-
-            // User adjusted attack time
-            gainNode.gain.linearRampToValueAtTime(1, now + attack);
-
-            // User adjusted decay time and sustain level
-            const sustainStart = Math.max(sustain, 0.001); // Ensure sustain is not zero to avoid issues with linearRampToValueAtTime
-            gainNode.gain.exponentialRampToValueAtTime(sustainStart, now + attack + decay);
-
-            const noteDuration = 0.5; // Total duration of the note in seconds
-            const releaseStartTime = now + attack + decay + noteDuration; 
-            gainNode.gain.setValueAtTime(sustain, releaseStartTime);
-
-            gainNode.gain.linearRampToValueAtTime(0.001, releaseStartTime + release); // Ramp down to near zero to avoid clicks
-
-
-            //Connecting nodes: Oscillator -> Filter -> Gain -> Analyser -> Destination
-
-            osc.connect(filter);
-            filter.connect(gainNode);
-            gainNode.connect(analyser);
-            analyser.connect(audioCtx.destination);
-            osc.start(now);
-            
-            const totalDuration = attack + decay + noteDuration + release;
-            osc.stop(now + totalDuration);
+            // Play middle C with one-shot duration
+            playNote('C', 0.5);
             
         });
         
@@ -196,16 +265,18 @@
   
                 const patch = await response.json();
                 console.log("Received AI Patch:", patch);
-
+                document.getElementById('voices').value = patch.oscillator.voices;
+                document.getElementById('unison').value = patch.oscillator.unison;
                 document.getElementById('waveType').value = patch.oscillator.type;
                 document.getElementById('cutoff').value = patch.filter.cutoff;
                 document.getElementById('attack').value = patch.envelope.attack;
                 document.getElementById('decay').value = patch.envelope.decay;
                 document.getElementById('sustain').value = patch.envelope.sustain;
                 document.getElementById('release').value = patch.envelope.release;
+                
 
    
-                ['cutoff', 'attack', 'decay', 'sustain', 'release'].forEach(id => {
+                ['cutoff', 'attack', 'decay', 'sustain', 'release', 'voices', 'unison'].forEach(id => {
                     document.getElementById(id).dispatchEvent(new Event('input'));
                 });
 

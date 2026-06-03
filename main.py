@@ -49,7 +49,11 @@ async def generate_patch(request: SoundRequest):
     # The JSON schema contract
     schema_definition = """
     {
-        "oscillator": {"type": "sine|square|sawtooth|triangle"},
+        "oscillator": {
+            "type": "sine|square|sawtooth|triangle",
+            "voices": int (1 to 8, use higher numbers for thick/wide sounds like supersaws),
+            "unison": int (0 to 50, use higher numbers for detuned, chorused, or aggressive sounds)
+        },
         "envelope": {
             "attack": float (0.0 to 2.0 seconds), 
             "decay": float (0.0 to 2.0 seconds), 
@@ -57,8 +61,8 @@ async def generate_patch(request: SoundRequest):
             "release": float (0.0 to 5.0 seconds)
         },
         "filter": {
-            "type": "lowpass|highpass|bandpass", 
-            "cutoff": int (20 to 20000 Hz)
+            "type": "lowpass", 
+            "cutoff": int (100 to 10000 Hz)
         }
     }
     """
@@ -67,6 +71,8 @@ async def generate_patch(request: SoundRequest):
     system_instruction = f"""
     You are an expert synthesizer sound designer. 
     Convert the user's natural language sound description into a precise mathematical JSON configuration.
+    Use the oscillator fields to describe both the number of unison voices and the detune spread.
+    For thick, wide, or chorus-like sounds, choose higher values for `voices` and `unison` as appropriate.
     You must ONLY reply with valid JSON matching this exact schema:
     {schema_definition}
     """
