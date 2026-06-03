@@ -42,6 +42,13 @@
         </div>
     </div>
 
+    # AI Copilot Section
+    <div class="section-title" style="color: #a200ff; border-bottom-color: #a200ff;">AI Copilot</div>
+        <div class="control-group">
+            <input type="text" id="aiPrompt" placeholder="e.g., A dark, plucky 80s bass with a long echo..." style="padding: 12px; width: 100%; border-radius: 6px; border: none; background: #333; color: white; font-size: 14px; box-sizing: border-box;">
+            <button id="generateBtn" class="trigger-btn" style="background: #a200ff; color: white; margin-top: 10px;">Generate & Play</button>
+        </div>
+
     # Filter and Envelope controls
     <div class="section-title">Filter</div>
         <div class="control-group">
@@ -147,6 +154,61 @@
             osc.stop(now + totalDuration);
             
         });
+        
+        
+        // AI Integration Logic
+        document.getElementById('generateBtn').addEventListener('click', async () => {
+            const promptText = document.getElementById('aiPrompt').value;
+            const aiBtn = document.getElementById('generateBtn');
+
+            if (!promptText) {
+                alert("Please describe a sound first!");
+                return;
+            }
+
+
+            aiBtn.innerText = "AI is thinking...";
+            aiBtn.disabled = true;
+
+            try {
+  
+                const response = await fetch('http://127.0.0.1:8000/generate-patch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: promptText })
+                });
+
+                if (!response.ok) throw new Error(`Server error: ${response.status}`);
+                
+  
+                const patch = await response.json();
+                console.log("Received AI Patch:", patch);
+
+                document.getElementById('waveType').value = patch.oscillator.type;
+                document.getElementById('cutoff').value = patch.filter.cutoff;
+                document.getElementById('attack').value = patch.envelope.attack;
+                document.getElementById('decay').value = patch.envelope.decay;
+                document.getElementById('sustain').value = patch.envelope.sustain;
+                document.getElementById('release').value = patch.envelope.release;
+
+   
+                ['cutoff', 'attack', 'decay', 'sustain', 'release'].forEach(id => {
+                    document.getElementById(id).dispatchEvent(new Event('input'));
+                });
+
+
+                document.getElementById('playBtn').click();
+
+            } catch (error) {
+                console.error("Error connecting to AI:", error);
+                alert("Failed to connect to the AI. Ensure your Python server is running!");
+            } finally {
+                
+                aiBtn.innerText = "Generate & Play";
+                aiBtn.disabled = false;
+            }
+        });
+
     </script>
 </body>
 </html>
