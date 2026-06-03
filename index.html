@@ -109,11 +109,12 @@
             'F#': 369.99, 'G': 392.00, 'G#': 415.30, 'A': 440.00, 'A#': 466.16, 'B': 493.88
         };
 
-        const freqSlider = (id, valId, suffix = "") => {
+        const freqSlider = (id, valId) => {
             const input = document.getElementById(id);
             const label = document.getElementById(valId);
             input.addEventListener('input', () => {
-                label.textContent = input.value + suffix;
+                // Update only the numeric value; keep units in the HTML label
+                label.textContent = input.value;
             });
         };
         freqSlider('freq', 'freqVal', ' Hz');
