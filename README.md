@@ -26,3 +26,5 @@ A high-performance, browser based software synthesizer featuring real time Digit
    ```bash
    git clone [https://github.com/only1r/ai-synth-copilot.git](https://github.com/only1r/ai-synth-copilot.git)
    cd ai-synth-copilot
+##
+Website link: https://only1r.github.io/OneShot/
